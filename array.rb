@@ -23,7 +23,7 @@ class Array
       if v>=0 and v<=subarray.size-1 then
         subarray = subarray[v]
       else
-        warn("#{v} outside of bounds: 0..#{subarray.size-1}")
+        # warn("#{v} outside of bounds: 0..#{subarray.size-1}")
         return false
       end
     end

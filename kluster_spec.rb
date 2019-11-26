@@ -1,28 +1,10 @@
 require 'rspec'
 require './klusterizer'
 require './area'
+require './helpers'
 require 'matrix'
 
-describe 'Klusterizing' do
-
-  before() do
-    require './klusterizer'
-    @k = Klusterizer.new()
-    @k.add_dimension("allocation", %q(1adt
-1adt + 1chd[0-2]
-1adt + 1chd[3-12]
-1adt + 1chd[0-2] + 1chd[3-12]
-1adt + 2chd[0-2]
-1adt + 2chd[3-12]
-2adt
-2adt + 1chd[0-2]
-2adt + 1chd[3-12]
-3adt).split(/\n/))
-    @k.add_dimension("Room type", ['single', 'standard', 'junior suite' ])
-    @k.add_dimension("Meal type", ['AO', 'BB' ])
-    @k.add_dimension("Date", (1000..1099).map {|i| "#{i}" })
-  end
-
+describe 'k0' do
 
   it 'should init values' do
     a = Klusterizer.new()
@@ -32,10 +14,97 @@ describe 'Klusterizing' do
 
     a.init_values(1)
     expect(a.values).to eq [[1,1,1],
-                    [1,1,1],
-                    [1,1,1]]
+                            [1,1,1],
+                            [1,1,1]]
     expect( a.area_eql?( Area.new([0,0], [1,1]), 1 )).to be true
   end
+end
+
+describe 'Klusterizing1' do
+  before(:each) do
+    @g = Klusterizer.new()
+    @g.add_dimension("x",(0..10).map {|i| "#{i}" })
+    @g.add_dimension("y",(0..10).map {|i| "#{i}" })
+    @g.init_values( 10 )
+  end
+
+
+  it 'generates random points outside of areas' do
+    # warn @g.dimension_end_point
+    p = @g.new_random_point_outside_of([ Area.new([1,1],[10,10]), Area.new([1,0],[10,0]), Area.new([0,1],[0,10]) ])
+    expect( p ).to eq [0,0]
+  end
+
+  it 'grow area well' do
+    random_point = [5,5]
+
+    area = Area.new(random_point, random_point)
+
+    new_area = @g.grow_area( area )
+    expect( new_area.to_a ).to eq( [ @g.dimension_start_point, @g.dimension_end_point ] )
+  end
+
+
+  it 'grow area well - 2' do
+    random_point = [3,4]
+    area = Area.new(random_point, random_point)
+    @g.values[3][3] = 100
+    new_area = @g.grow_area( area )
+    expect( new_area.includes? random_point ).to be true
+    expect( new_area.to_a ).to eq( [ [0,4], [10,10] ] )
+  end
+
+  it 'grow area well - loop' do
+    (0..100).each do
+      @g.init_values( 10 )
+      random_point = [3,4]
+      area = Area.new(random_point, random_point)
+      @g.values[3][3] = 100
+      new_area = @g.grow_area( area )
+      expect( new_area.includes? random_point ).to be true
+      expect( new_area.to_a ).to eq( [ [0,4], [10,10] ] )
+    end
+
+  end
+
+  it 'clusterizing well loop' do
+    (0..100).each do
+      @g.init_values( 10 )
+      random_point = [5,5]
+      area = Area.new(random_point, random_point)
+      @g.values[4][3] = 100
+      clusters = @g.clusterize
+      # warn clusters.inspect
+      expect( (clusters.include? Area.new([5,0],[10,10])) ||
+                  (clusters.include? Area.new([0,4],[10,10])) ||
+                  (clusters.include? Area.new([4,4],[10,10])) ||
+                  (clusters.include? Area.new([5,3],[10,10]))
+      ).to be true
+      expect( clusters.include? Area.new([4,3],[4,3]) ).to be true
+    end
+  end
+end
+
+describe 'Klusterizing2' do
+
+  before(:each) do
+    @k = Klusterizer.new()
+    @k.add_dimension("Allocation", %q(1adt
+1adt + 1chd[0-2]
+1adt + 1chd[3-12]
+1adt + 1chd[0-2] + 1chd[3-12]
+1adt + 2chd[0-2]
+1adt + 2chd[3-12]
+2adt
+2adt + 1chd[0-2]
+2adt + 1chd[3-12]
+3adt).split(/\n/))
+    @k.add_dimension("Room type", ['Single', 'Standard', 'Junior Suite' ])
+    @k.add_dimension("Meal type", ['AO', 'BB', 'HB']) # если добавить здесь третье значение, падают тесты в другом блоке
+    @k.add_dimension("Date", (date_to_i("01/09/2019")..date_to_i("31/12/2019")).map {|i| "#{date_i_to_s(i)}" })
+  end
+
+
   it 'should calc vectors' do
     # @k.new_point( [ '1adt', 'single','BB', '2000' ]  )
     fp = Vector[3,0,2]
@@ -73,12 +142,12 @@ describe 'Klusterizing' do
   end
 
   it 'inits well' do
-    expect(@k.dimension_end_point).to eq [9,2,1,99]
+    expect(@k.dimension_end_point).to eq [9,2,2,121]
   end
 
   it 'generates random points inside of area' do
     random_point = @k.new_random_point
-    warn random_point.inspect
+    # warn random_point.inspect
     (0..@k.dimension_names.size-1).each do |i|
       expect( random_point[i] ).to be >= @k.dimension_start_point[i]
       expect( random_point[i] ).to be <= @k.dimension_end_point[i]
@@ -99,54 +168,112 @@ describe 'Klusterizing' do
     expect( new_area.to_a ).to eq( [[5,1,0,0],[5,1,0,64]] )
   end
 
-  it 'grow area well' do
-    g = Klusterizer.new()
-    g.add_dimension("x",(0..10).map {|i| "#{i}" })
-    g.add_dimension("y",(0..10).map {|i| "#{i}" })
-   # g.add_dimension("z",(50..60).map {|i| "#{i}" })
-    # @k.add_dimension("Date", (1000..1099).map {|i| "#{i}" })
-    g.init_values( 10 )
 
-    random_point = [5,5]
 
-    area = Area.new(random_point, random_point)
-
-    new_area = g.grow_area( area )
-    expect( new_area.to_a ).to eq( [ g.dimension_start_point, g.dimension_end_point ] )
+  it 'converts names to indexes' do
+    expect( @k.names_to_coords(['1adt','Standard','AO','01/10/2019']) ).to eq [0,1,0,30]
   end
 
-  it 'grow area well - 2' do
-    g = Klusterizer.new()
-    g.add_dimension("x",(0..10).map {|i| "#{i}" })
-    g.add_dimension("y",(0..10).map {|i| "#{i}" })
-    g.init_values( 10 )
-    random_point = [5,5]
-    area = Area.new(random_point, random_point)
-    g.values[3][3] = 100
-    new_area = g.grow_area( area )
-    expect( new_area.to_a ).to eq( [ [0,4], [10,10] ] )
+  it 'inits values by name' do
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'BB' ],
+                        'Date' => (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 80 )
+
+
+    point = @k.names_to_coords( ['1adt', 'Standard', 'BB', '15/10/2019'] )
+
+    expect( @k.values.get_nested_value( point ) ).to eq 80
+
+    new_area = @k.grow_area( Area.new( point, point) )
+    expect( new_area.to_a ).to eq( [[ 0,0,1,30], [0,1,1,59]] )
+
+
   end
 
 
 
-  it 'clusterizing well' do
-    g = Klusterizer.new()
-    g.add_dimension("x",(0..10).map {|i| "#{i}" })
-    g.add_dimension("y",(0..10).map {|i| "#{i}" })
-    g.init_values( 10 )
-    random_point = [5,5]
-    area = Area.new(random_point, random_point)
-    g.values[3][3] = 100
-    clusters = g.clusterize.sort {|a,b| a.square <=> b.square }
-    expect( clusters ).to eq [ Area() ]
+  it 'should return result' do
+    @k.init_values( nil )
+    #@k.init_by_names( { "Room type" => [ "Single"] }, 30 )
+    #@k.init_by_names( { "Room type" => [ "Standard"] }, 50 )
+    #@k.init_by_names( { "Room type" => [ "Junior Suite"] }, 100 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+               "Room type" => [ 'Single', 'Standard' ],
+               'Meal type' => [ 'BB' ],
+               'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+             }, 80.0 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'HB' ],
+                        'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 100.0 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'AO' ],
+                        'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 60.0 )
+
+    clusters = @k.clusterize
+    # warn( clusters.inspect )
+    expect( @k.klusters_print( clusters ) ).to eq %Q(1adt\tSingle, Standard\tAO\t01/10/2019-30/10/2019:\t60.0\n) +
+                                                  %Q(1adt\tSingle, Standard\tBB\t01/10/2019-30/10/2019:\t80.0\n) +
+                                                  %Q(1adt\tSingle, Standard\tHB\t01/10/2019-30/10/2019:\t100.0)
+
   end
+end
 
-  xit 'should return result' do
-    @k.klusters_print .should eq %q(1adt, single|standard, BB, 1/10/2019-30/10/2019: 80.0
-    1adt, single|standard, HB, 1/10/2019-30/10/2019: 100.0
-    1adt, single|standard, FB, 1/10/2019-30/10/2019: 120.0)
+describe 'real test drive' do
+  it 'should return result 2' do
+
+    @k = Klusterizer.new()
+    @k.add_dimension("Allocation", %q(1adt
+1adt + 1chd[0-2]
+1adt + 1chd[3-12]
+1adt + 1chd[0-2] + 1chd[3-12]
+1adt + 2chd[0-2]
+1adt + 2chd[3-12]
+2adt
+2adt + 1chd[0-2]
+2adt + 1chd[3-12]
+3adt).split(/\n/))
+    @k.add_dimension("Room type", ['Single', 'Standard', 'Junior Suite' ])
+    @k.add_dimension("Meal type", ['AO', 'BB', 'HB']) # если добавить здесь третье значение, падают тесты в другом блоке
+    @k.add_dimension("Date", (date_to_i("01/09/2019")..date_to_i("31/12/2019")).map {|i| "#{date_i_to_s(i)}" })
+
+  @k.init_values( nil )
+    @k.init_by_names( { "Room type" => [ "Single"] }, 30 )
+    @k.init_by_names( { "Room type" => [ "Standard"] }, 50 )
+    @k.init_by_names( { "Room type" => [ "Junior Suite"] }, 100 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'BB' ],
+                        'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 80.0 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'HB' ],
+                        'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 100.0 )
+
+    @k.init_by_names( { "Allocation" => [ "1adt"],
+                        "Room type" => [ 'Single', 'Standard' ],
+                        'Meal type' => [ 'AO' ],
+                        'Date' =>  (date_to_i("1/10/2019")..date_to_i("30/10/2019")).map { |i| date_i_to_s(i) }
+                      }, 60.0 )
+
+    clusters = @k.clusterize
+    # warn( clusters.inspect )
+    expect( @k.klusters_print( clusters ) ).to eq %Q(1adt\tSingle, Standard\tAO\t01/10/2019-30/10/2019:\t60.0\n) +
+                                                      %Q(1adt\tSingle, Standard\tBB\t01/10/2019-30/10/2019:\t80.0\n) +
+                                                      %Q(1adt\tSingle, Standard\tHB\t01/10/2019-30/10/2019:\t100.0)
 
   end
-
-
 end
